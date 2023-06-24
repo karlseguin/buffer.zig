@@ -50,14 +50,16 @@ pub const StringBuilder = struct {
 		}
 	}
 
-	pub fn reset(self: *StringBuilder) void {
+	pub fn reset(self: *StringBuilder, clear_dynamic: bool) void {
 		self.pos = 0;
-		if (self.dynamic) |dyn| {
-			(self._da orelse self._a).free(dyn);
-			self.dynamic = null;
-			self.buf = self.static;
+		if (clear_dynamic) {
+			if (self.dynamic) |dyn| {
+				(self._da orelse self._a).free(dyn);
+				self.dynamic = null;
+				self.buf = self.static;
+			}
+			self._da = null;
 		}
-		self._da = null;
 	}
 
 	pub fn len(self: StringBuilder) usize {
@@ -201,7 +203,7 @@ test "growth" {
 		try t.expectEqual(492, sb.len());
 		try t.expectString("over 9000!!!!If you were to run this code, you'd almost certainly see a segmentation fault (aka, segfault). We create a Response which involves creating an ArenaAllocator and from that, an Allocator. This allocator is then used to format our string. For the purpose of this example, we create a 2nd response and immediately free it. We need this for the same reason that warning1 in our first example printed an almost ok value: we want to re-initialize the memory in our init function stack.", sb.string());
 
-		sb.reset();
+		sb.reset(true);
 	}
 }
 
@@ -227,6 +229,22 @@ test "truncate" {
 	try t.expectString("hello w", sb.string());
 }
 
+test "reset without clear" {
+	var sb = try StringBuilder.init(t.allocator, 5);
+	defer sb.deinit();
+
+
+
+	try sb.write("hello world!1");
+	try t.expectString("hello world!1", sb.string());
+
+	sb.reset(false);
+	try t.expectEqual(0, sb.len());
+	try t.expectEqual(false, sb.dynamic == null);
+	try sb.write("over 9000");
+	try sb.write("over 9000");
+}
+
 test "fuzz" {
 	var control = std.ArrayList(u8).init(t.allocator);
 	defer control.deinit();
@@ -249,7 +267,7 @@ test "fuzz" {
 			try control.appendSlice(input);
 			try t.expectString(control.items, sb.string());
 		}
-		sb.reset();
+		sb.reset(true);
 		control.clearRetainingCapacity();
 		_ = arena.reset(.free_all);
 	}

@@ -69,7 +69,7 @@ pub const Pool = struct {
 	}
 
 	pub fn release(self: *Pool, sb: *StringBuilder) void {
-		sb.reset();
+		sb.reset(true);
 		self.mutex.lock();
 
 		var builders = self.builders;
