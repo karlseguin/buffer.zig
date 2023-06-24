@@ -41,6 +41,10 @@ pub const Pool = struct {
 	}
 
 	pub fn acquire(self: *Pool) !*StringBuilder {
+		return self.acquireWithAllocator(self.allocator);
+	}
+
+	pub fn acquireWithAllocator(self: *Pool, dyn_allocator: Allocator) !*StringBuilder {
 		self.mutex.lock();
 
 		const builders = self.builders;
@@ -53,12 +57,14 @@ pub const Pool = struct {
 			const sb = try allocator.create(StringBuilder);
 			sb.* = try StringBuilder.init(allocator, self.builder_size);
 			if (comptime builtin.is_test) sb.buf[0] = 0;
+			sb._da = dyn_allocator;
 			return sb;
 		}
 		const index = available - 1;
 		const sb = builders[index];
 		self.available = index;
 		self.mutex.unlock();
+		sb._da = dyn_allocator;
 		return sb;
 	}
 
@@ -101,6 +107,21 @@ test "pool: acquire and release" {
 	p.release(sb3a);
 	p.release(sb2a);
 	p.release(sb1b);
+}
+
+test "pool: dynamic allocator" {
+	var p = try Pool.init(t.allocator, 2, 5);
+	defer p.deinit();
+
+	var arena = std.heap.ArenaAllocator.init(t.allocator);
+	defer arena.deinit();
+
+	var sb = p.acquireWithAllocator(arena.allocator()) catch unreachable;
+	try sb.write("hello world how's it going?");
+	try sb.write("he");
+	try sb.write("hello world");
+	try sb.write("are you doing well? I hope so, I don't love how this is being implemented, but I think the feature is worthwhile");
+	p.release(sb);
 }
 
 test "pool: threadsafety" {

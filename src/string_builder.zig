@@ -4,7 +4,19 @@ const Allocator = std.mem.Allocator;
 pub const Pool = @import("pool.zig").Pool;
 
 pub const StringBuilder = struct {
-	allocator: Allocator,
+	// Two allocators! This is largely a feature meant to be used with the Pool.
+	// Imagine you have a pool of 100 StringBuilders. Each one has a static buffer
+	// of 2K, allocated with a general purpose allocator. We store that in _a.
+	// Now you acquire an SB and start to write. You write more than 2K, so we
+	// need to allocate `dynamic`. Yes, we could use our general purpose allocator
+	// (aka _a), but what if the app would like to use a different allocator for
+	// that, like an Arena?
+	// Thus, `static` is always allocated with _a, and apps can opt to use a
+	// different allocator, _da, to manage `dynamic`. `_da` is meant to be set
+	// via pool.acquireWithAllocator since we expect _da to be transient.
+	_a: Allocator,
+
+	_da: ?Allocator,
 
 	// where in buf we currently are
 	pos: usize,
@@ -21,29 +33,31 @@ pub const StringBuilder = struct {
 	pub fn init(allocator: Allocator, size: usize) !StringBuilder {
 		const static = try allocator.alloc(u8, size);
 		return .{
+			._a = allocator,
+			._da = null,
 			.pos = 0,
 			.dynamic = null,
 			.buf = static,
 			.static = static,
-			.allocator = allocator,
 		};
 	}
 
 	pub fn deinit(self: StringBuilder) void {
-		const allocator = self.allocator;
+		const allocator = self._a;
 		allocator.free(self.static);
 		if (self.dynamic) |dyn| {
-			allocator.free(dyn);
+			(self._da orelse allocator).free(dyn);
 		}
 	}
 
 	pub fn reset(self: *StringBuilder) void {
 		self.pos = 0;
 		if (self.dynamic) |dyn| {
-			self.allocator.free(dyn);
+			(self._da orelse self._a).free(dyn);
 			self.dynamic = null;
 			self.buf = self.static;
 		}
+		self._da = null;
 	}
 
 	pub fn len(self: StringBuilder) usize {
@@ -113,7 +127,7 @@ pub const StringBuilder = struct {
 			if (new_capacity >= required_capacity) break;
 		}
 
-		const allocator = self.allocator;
+		const allocator = self._da orelse self._a;
 		if (buf.ptr == self.static.ptr or !allocator.resize(buf, new_capacity)) {
 			const new_buffer = try allocator.alloc(u8, new_capacity);
 			std.mem.copyForwards(u8, new_buffer[0..buf.len], buf);

@@ -38,3 +38,5 @@ defer pool.release(sb);
 ```
 
 The `Pool` is thread-safe. The `StringBuilder` is not thread safe.
+
+For a more advanced use case, `pool.acquireWithAllocator(std.mem.Allocator)` can be used. This has a specific purpose: to allocate the static buffer upfront using [probably] a general purpose allocator, but for any dynamic allocation to happen with a [probably] arena allocator. This is meant for the case where an arena allocator is available which outlives the checked out buffer. In such cases, using the arena allocator for any potential dynamic allocation by the buffer will offer better performance.
