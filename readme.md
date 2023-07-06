@@ -14,7 +14,7 @@ const StringBuilder = @import("string_builder").StringBuilder;
 var sb = try new StringBuilder(allocator, 100);
 
 try sb.writeByte('o');
-try sb.write('ver 9000!1');
+try sb.write("ver 9000!1");
 sb.truncate(1);
 
 sb.len();  // 10
@@ -22,7 +22,6 @@ sb.string(); // "over 9000!"
 ```
 
 You can call `sb.writer()` to get an `std.io.Writer`.
-```
 
 ## Pooling
 
