@@ -147,6 +147,13 @@ pub const StringBuilder = struct {
 		}
 	}
 
+	pub fn copy(self: StringBuilder, allocator: Allocator) ![]const u8 {
+		const pos = self.pos;
+		var c = try allocator.alloc(u8, pos);
+		@memcpy(c, self.buf[0..pos]);
+		return c;
+	}
+
 	pub fn writer(self: *StringBuilder) Writer.IOWriter {
 			return .{.context = Writer.init(self)};
 		}
@@ -279,6 +286,16 @@ test "writer" {
 
 	try std.json.stringify(.{.over = 9000, .spice = "must flow", .ok = true}, .{}, sb.writer());
 	try t.expectString("{\"over\":9000,\"spice\":\"must flow\",\"ok\":true}", sb.string());
+}
+
+test "copy" {
+	var sb = try StringBuilder.init(t.allocator, 10);
+	defer sb.deinit();
+
+	try sb.write("hello!!");
+	const c = try sb.copy(t.allocator);
+	defer t.allocator.free(c);
+	try t.expectString("hello!!", c);
 }
 
 fn testString(allocator: Allocator, random: std.rand.Random) []const u8 {
