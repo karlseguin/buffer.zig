@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const StringBuilder = @import("string_builder.zig").StringBuilder;
+const Buffer = @import("buffer.zig").Buffer;
 
 const Mutex = std.Thread.Mutex;
 const Allocator = std.mem.Allocator;
@@ -10,78 +10,78 @@ pub const Pool = struct {
 	mutex: Mutex,
 	available: usize,
 	allocator: Allocator,
-	builder_size: usize,
-	builders: []*StringBuilder,
+	buffer_size: usize,
+	buffers: []*Buffer,
 
-	pub fn init(allocator: Allocator, pool_size: u16, builder_size: usize) !Pool {
-		const builders = try allocator.alloc(*StringBuilder, pool_size);
+	pub fn init(allocator: Allocator, pool_size: u16, buffer_size: usize) !Pool {
+		const buffers = try allocator.alloc(*Buffer, pool_size);
 
 		for (0..pool_size) |i| {
-			var sb = try allocator.create(StringBuilder);
-			sb.* = try StringBuilder.init(allocator, builder_size);
-			builders[i] = sb;
+			var sb = try allocator.create(Buffer);
+			sb.* = try Buffer.init(allocator, buffer_size);
+			buffers[i] = sb;
 		}
 
 		return Pool{
 			.mutex = Mutex{},
-			.builders = builders,
+			.buffers = buffers,
 			.allocator = allocator,
 			.available = pool_size,
-			.builder_size = builder_size
+			.buffer_size = buffer_size
 		};
 	}
 
 	pub fn deinit(self: *Pool) void {
 		const allocator = self.allocator;
-		for (self.builders) |sb| {
+		for (self.buffers) |sb| {
 			sb.deinit();
 			allocator.destroy(sb);
 		}
-		allocator.free(self.builders);
+		allocator.free(self.buffers);
 	}
 
-	pub fn acquire(self: *Pool) !*StringBuilder {
+	pub fn acquire(self: *Pool) !*Buffer {
 		return self.acquireWithAllocator(self.allocator);
 	}
 
-	pub fn acquireWithAllocator(self: *Pool, dyn_allocator: Allocator) !*StringBuilder {
+	pub fn acquireWithAllocator(self: *Pool, dyn_allocator: Allocator) !*Buffer {
 		self.mutex.lock();
 
-		const builders = self.builders;
+		const buffers = self.buffers;
 		const available = self.available;
 		if (available == 0) {
 			// dont hold the lock over factory
 			self.mutex.unlock();
 			const allocator = self.allocator;
 
-			const sb = try allocator.create(StringBuilder);
-			sb.* = try StringBuilder.init(allocator, self.builder_size);
+			const sb = try allocator.create(Buffer);
+			sb.* = try Buffer.init(allocator, self.buffer_size);
 			if (comptime builtin.is_test) sb.buf[0] = 0;
 			sb._da = dyn_allocator;
 			return sb;
 		}
 		const index = available - 1;
-		const sb = builders[index];
+		const sb = buffers[index];
 		self.available = index;
 		self.mutex.unlock();
 		sb._da = dyn_allocator;
 		return sb;
 	}
 
-	pub fn release(self: *Pool, sb: *StringBuilder) void {
+	pub fn release(self: *Pool, sb: *Buffer) void {
 		sb.reset(true);
 		self.mutex.lock();
 
-		var builders = self.builders;
+		var buffers = self.buffers;
 		const available = self.available;
-		if (available == builders.len) {
+		if (available == buffers.len) {
 			self.mutex.unlock();
 			const allocator = self.allocator;
 			sb.deinit();
 			allocator.destroy(sb);
 			return;
 		}
-		builders[available] = sb;
+		buffers[available] = sb;
 		self.available = available + 1;
 		self.mutex.unlock();
 	}
@@ -129,7 +129,7 @@ test "pool: threadsafety" {
 	defer p.deinit();
 
 	// initialize this to 0 since we're asserting that it's 0
-	for (p.builders) |sb| {
+	for (p.buffers) |sb| {
 		sb.buf[0] = 0;
 	}
 

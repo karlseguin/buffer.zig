@@ -4,12 +4,12 @@ pub fn build(b: *std.Build) !void {
 	const target = b.standardTargetOptions(.{});
 	const optimize = b.standardOptimizeOption(.{});
 
-	_ = b.addModule("string_builder", .{
-		.source_file = .{ .path = "src/string_builder.zig" },
+	_ = b.addModule("buffer", .{
+		.source_file = .{ .path = "src/buffer.zig" },
 	});
 
 	const lib_test = b.addTest(.{
-		.root_source_file = .{ .path = "src/string_builder.zig" },
+		.root_source_file = .{ .path = "src/buffer.zig" },
 		.target = target,
 		.optimize = optimize,
 	});
