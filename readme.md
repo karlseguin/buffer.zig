@@ -11,7 +11,7 @@ const Buffer = @import("buffer").Buffer;
 // those 100 bytes (aka the static portion of the buffer) are 
 // re-used when pooling is used
 
-var buf = try new Buffer(allocator, 100);
+var buf = try Buffer.init(allocator, 100);
 
 try buf.writeByte('o');
 try buf.write("ver 9000!1");
