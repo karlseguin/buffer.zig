@@ -8,6 +8,7 @@ pub fn expectEqual(expected: anytype, actual: anytype) !void {
 	try std.testing.expectEqual(@as(@TypeOf(actual), expected), actual);
 }
 pub const expectString = std.testing.expectEqualStrings;
+pub const exectSlice = std.testing.expectEqualSlices;
 
 pub fn getRandom() std.rand.DefaultPrng {
 	var seed: u64 = undefined;

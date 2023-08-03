@@ -105,6 +105,54 @@ pub const Buffer = struct {
 		return self.writeAssumeCapacity(data);
 	}
 
+	pub fn writeU16Little(self: *Buffer, value: u16) !void {
+		try self.ensureUnusedCapacity(2);
+		const pos = self.pos;
+		const end_pos = self.pos + 2;
+		std.mem.writeIntLittle(u16, self.buf[pos..end_pos][0..2], value);
+		self.pos = end_pos;
+	}
+
+	pub fn writeU32Little(self: *Buffer, value: u32) !void {
+		try self.ensureUnusedCapacity(4);
+		const pos = self.pos;
+		const end_pos = self.pos + 4;
+		std.mem.writeIntLittle(u32, self.buf[pos..end_pos][0..4], value);
+		self.pos = end_pos;
+	}
+
+	pub fn writeU64Little(self: *Buffer, value: u64) !void {
+		try self.ensureUnusedCapacity(8);
+		const pos = self.pos;
+		const end_pos = self.pos + 8;
+		std.mem.writeIntLittle(u64, self.buf[pos..end_pos][0..8], value);
+		self.pos = end_pos;
+	}
+
+	pub fn writeU16Big(self: *Buffer, value: u16) !void {
+		try self.ensureUnusedCapacity(2);
+		const pos = self.pos;
+		const end_pos = self.pos + 2;
+		std.mem.writeIntBig(u16, self.buf[pos..end_pos][0..2], value);
+		self.pos = end_pos;
+	}
+
+	pub fn writeU32Big(self: *Buffer, value: u32) !void {
+		try self.ensureUnusedCapacity(4);
+		const pos = self.pos;
+		const end_pos = self.pos + 4;
+		std.mem.writeIntBig(u32, self.buf[pos..end_pos][0..4], value);
+		self.pos = end_pos;
+	}
+
+	pub fn writeU64Big(self: *Buffer, value: u64) !void {
+		try self.ensureUnusedCapacity(8);
+		const pos = self.pos;
+		const end_pos = self.pos + 8;
+		std.mem.writeIntBig(u64, self.buf[pos..end_pos][0..8], value);
+		self.pos = end_pos;
+	}
+
 	pub fn writeAssumeCapacity(self: *Buffer, data: []const u8) void {
 		const pos = self.pos;
 		const end_pos = pos + data.len;
@@ -296,6 +344,32 @@ test "copy" {
 	const c = try sb.copy(t.allocator);
 	defer t.allocator.free(c);
 	try t.expectString("hello!!", c);
+}
+
+test "write little" {
+	var sb = try Buffer.init(t.allocator, 20);
+	defer sb.deinit();
+	try sb.writeU64Little(11234567890123456789);
+	try t.exectSlice(u8, &[_]u8{21, 129, 209, 7, 249, 51, 233, 155}, sb.string());
+
+	try sb.writeU32Little(3283856184);
+	try t.exectSlice(u8, &[_]u8{21, 129, 209, 7, 249, 51, 233, 155, 56, 171, 187, 195}, sb.string());
+
+	try sb.writeU16Little(15000);
+	try t.exectSlice(u8, &[_]u8{21, 129, 209, 7, 249, 51, 233, 155, 56, 171, 187, 195, 152, 58}, sb.string());
+}
+
+test "write big" {
+	var sb = try Buffer.init(t.allocator, 20);
+	defer sb.deinit();
+	try sb.writeU64Big(11234567890123456789);
+	try t.exectSlice(u8, &[_]u8{155, 233, 51, 249, 7, 209, 129, 21}, sb.string());
+
+	try sb.writeU32Big(3283856184);
+	try t.exectSlice(u8, &[_]u8{155, 233, 51, 249, 7, 209, 129, 21, 195, 187, 171, 56}, sb.string());
+
+	try sb.writeU16Big(15000);
+	try t.exectSlice(u8, &[_]u8{155, 233, 51, 249, 7, 209, 129, 21, 195, 187, 171, 56, 58, 152}, sb.string());
 }
 
 fn testString(allocator: Allocator, random: std.rand.Random) []const u8 {

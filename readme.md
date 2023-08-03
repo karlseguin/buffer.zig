@@ -23,6 +23,8 @@ buf.string(); // "over 9000!"
 
 You can call `buf.writer()` to get an `std.io.Writer`.
 
+You can use `writeU16Big`, `writeU32Big`, `writeU64Big` and `writeU16Little`, `writeU32Little`, `writeU64Little` to write integer values.
+
 ## Pooling
 
 ```zig
