@@ -3,6 +3,109 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 pub const Pool = @import("pool.zig").Pool;
 
+pub const View = struct {
+	// points to either static or dynamic,
+	buf: []u8,
+
+	// position in buf that we're at
+	pos: usize,
+
+	pub fn len(self: View) usize {
+		return self.pos;
+	}
+
+	pub fn string(self: View) []u8 {
+		return self.buf[0..self.pos];
+	}
+
+	pub fn truncate(self: *View, n: usize) void {
+		const pos = self.pos;
+		if (n >= pos) {
+			self.pos = 0;
+			return;
+		}
+		self.pos = pos - n;
+	}
+
+	pub fn skip(self: *View, n: usize) usize {
+		const pos = self.pos;
+		const end_pos = pos + n;
+		self.pos = end_pos;
+		return pos;
+	}
+
+	pub fn copy(self: View, allocator: Allocator) ![]u8 {
+		const pos = self.pos;
+		var c = try allocator.alloc(u8, pos);
+		@memcpy(c, self.buf[0..pos]);
+		return c;
+	}
+
+	pub fn writeByte(self: *View, b: u8) void {
+		const pos = self.pos;
+		self.buf[pos] = b;
+		self.pos = pos + 1;
+	}
+
+	pub fn writeByteNTimes(self: *View, b: u8, n: usize) void {
+		const pos = self.pos;
+		const buf = self.buf;
+		for (0..n) |offset| {
+			buf[pos+offset] = b;
+		}
+		self.pos = pos + n;
+	}
+
+	pub fn write(self: *View, data: []const u8) void {
+		const pos = self.pos;
+		const end_pos = pos + data.len;
+		std.mem.copyForwards(u8, self.buf[pos..end_pos], data);
+		self.pos = end_pos;
+	}
+
+	pub fn writeU16Little(self: *View, value: u16) void {
+		const pos = self.pos;
+		const end_pos = self.pos + 2;
+		std.mem.writeIntLittle(u16, self.buf[pos..end_pos][0..2], value);
+		self.pos = end_pos;
+	}
+
+	pub fn writeU32Little(self: *View, value: u32) void {
+		const pos = self.pos;
+		const end_pos = self.pos + 4;
+		std.mem.writeIntLittle(u32, self.buf[pos..end_pos][0..4], value);
+		self.pos = end_pos;
+	}
+
+	pub fn writeU64Little(self: *View, value: u64) void {
+		const pos = self.pos;
+		const end_pos = self.pos + 8;
+		std.mem.writeIntLittle(u64, self.buf[pos..end_pos][0..8], value);
+		self.pos = end_pos;
+	}
+
+	pub fn writeU16Big(self: *View, value: u16) void {
+		const pos = self.pos;
+		const end_pos = self.pos + 2;
+		std.mem.writeIntBig(u16, self.buf[pos..end_pos][0..2], value);
+		self.pos = end_pos;
+	}
+
+	pub fn writeU32Big(self: *View, value: u32) void {
+		const pos = self.pos;
+		const end_pos = self.pos + 4;
+		std.mem.writeIntBig(u32, self.buf[pos..end_pos][0..4], value);
+		self.pos = end_pos;
+	}
+
+	pub fn writeU64Big(self: *View, value: u64) void {
+		const pos = self.pos;
+		const end_pos = self.pos + 8;
+		std.mem.writeIntBig(u64, self.buf[pos..end_pos][0..8], value);
+		self.pos = end_pos;
+	}
+};
+
 pub const Buffer = struct {
 	// Two allocators! This is largely a feature meant to be used with the Pool.
 	// Imagine you have a pool of 100 StringBuilders. Each one has a static buffer
@@ -18,8 +121,7 @@ pub const Buffer = struct {
 
 	_da: ?Allocator,
 
-	// where in buf we currently are
-	pos: usize,
+	_view: View,
 
 	// fixed size, created on startup
 	static: []u8,
@@ -27,18 +129,18 @@ pub const Buffer = struct {
 	// created when we try to write more than static.len
 	dynamic: ?[]u8,
 
-	// points to either static or dynamic,
-	buf: []u8,
 
 	pub fn init(allocator: Allocator, size: usize) !Buffer {
 		const static = try allocator.alloc(u8, size);
 		return .{
 			._a = allocator,
 			._da = null,
-			.pos = 0,
 			.dynamic = null,
-			.buf = static,
 			.static = static,
+			._view = .{
+				.pos = 0,
+				.buf = static,
+			},
 		};
 	}
 
@@ -51,127 +153,107 @@ pub const Buffer = struct {
 	}
 
 	pub fn reset(self: *Buffer, clear_dynamic: bool) void {
-		self.pos = 0;
+		self._view.pos = 0;
 		if (clear_dynamic) {
 			if (self.dynamic) |dyn| {
 				(self._da orelse self._a).free(dyn);
 				self.dynamic = null;
-				self.buf = self.static;
+				self._view.buf = self.static;
 			}
 			self._da = null;
 		}
 	}
 
 	pub fn len(self: Buffer) usize {
-		return self.pos;
+		return self._view.pos;
 	}
 
 	pub fn string(self: Buffer) []const u8 {
-		return self.buf[0..self.pos];
+		return self._view.string();
 	}
 
 	pub fn truncate(self: *Buffer, n: usize) void {
-		const pos = self.pos;
-		if (n >= pos) {
-			self.pos = 0;
-			return;
-		}
-		self.pos = pos - n;
+		self._view.truncate(n);
 	}
 
 	pub fn writeByte(self: *Buffer, b: u8) !void {
 		try self.ensureUnusedCapacity(1);
-		self.writeByteAssumeCapacity(b);
+		self._view.writeByte(b);
 	}
 
 	pub fn writeByteAssumeCapacity(self: *Buffer, b: u8) void {
-		const pos = self.pos;
-		self.buf[pos] = b;
-		self.pos = pos + 1;
+		self._view.writeByte(b);
 	}
+
 
 	pub fn writeByteNTimes(self: *Buffer, b: u8, n: usize) !void {
 		try self.ensureUnusedCapacity(n);
-		const pos = self.pos;
-		const buf = self.buf;
-		for (0..n) |offset| {
-			buf[pos+offset] = b;
-		}
-		self.pos = pos + n;
+		self._view.writeByteNTimes(b, n);
 	}
 
 	pub fn write(self: *Buffer, data: []const u8) !void {
 		try self.ensureUnusedCapacity(data.len);
-		return self.writeAssumeCapacity(data);
+		self._view.write(data);
+	}
+
+	pub fn writeAssumeCapacity(self: *Buffer, data: []const u8) void {
+		self._view.write(data);
 	}
 
 	pub fn writeU16Little(self: *Buffer, value: u16) !void {
 		try self.ensureUnusedCapacity(2);
-		const pos = self.pos;
-		const end_pos = self.pos + 2;
-		std.mem.writeIntLittle(u16, self.buf[pos..end_pos][0..2], value);
-		self.pos = end_pos;
+		self._view.writeU16Little(value);
 	}
 
 	pub fn writeU32Little(self: *Buffer, value: u32) !void {
 		try self.ensureUnusedCapacity(4);
-		const pos = self.pos;
-		const end_pos = self.pos + 4;
-		std.mem.writeIntLittle(u32, self.buf[pos..end_pos][0..4], value);
-		self.pos = end_pos;
+		self._view.writeU32Little(value);
 	}
 
 	pub fn writeU64Little(self: *Buffer, value: u64) !void {
 		try self.ensureUnusedCapacity(8);
-		const pos = self.pos;
-		const end_pos = self.pos + 8;
-		std.mem.writeIntLittle(u64, self.buf[pos..end_pos][0..8], value);
-		self.pos = end_pos;
+		self._view.writeU64Little(value);
 	}
 
 	pub fn writeU16Big(self: *Buffer, value: u16) !void {
 		try self.ensureUnusedCapacity(2);
-		const pos = self.pos;
-		const end_pos = self.pos + 2;
-		std.mem.writeIntBig(u16, self.buf[pos..end_pos][0..2], value);
-		self.pos = end_pos;
+		self._view.writeU16Big(value);
 	}
 
 	pub fn writeU32Big(self: *Buffer, value: u32) !void {
 		try self.ensureUnusedCapacity(4);
-		const pos = self.pos;
-		const end_pos = self.pos + 4;
-		std.mem.writeIntBig(u32, self.buf[pos..end_pos][0..4], value);
-		self.pos = end_pos;
+		self._view.writeU32Big(value);
 	}
 
 	pub fn writeU64Big(self: *Buffer, value: u64) !void {
 		try self.ensureUnusedCapacity(8);
-		const pos = self.pos;
-		const end_pos = self.pos + 8;
-		std.mem.writeIntBig(u64, self.buf[pos..end_pos][0..8], value);
-		self.pos = end_pos;
+		self._view.writeU64Big(value);
 	}
 
-	pub fn writeAssumeCapacity(self: *Buffer, data: []const u8) void {
-		const pos = self.pos;
-		const end_pos = pos + data.len;
-		std.mem.copyForwards(u8, self.buf[pos..end_pos], data);
-		self.pos = end_pos;
+	pub fn skip(self: *Buffer, n: usize) !usize {
+		try self.ensureUnusedCapacity(n);
+		return self._view.skip(n);
+	}
+
+	pub fn view(self: *Buffer, pos: usize) View {
+		return .{
+			.pos = 0,
+			.buf = self._view.buf[pos..],
+		};
 	}
 
 	pub fn ensureUnusedCapacity(self: *Buffer, n: usize) !void {
-		return self.ensureTotalCapacity(self.pos + n);
+		return self.ensureTotalCapacity(self._view.pos + n);
 	}
 
 	pub fn ensureTotalCapacity(self: *Buffer, required_capacity: usize) !void {
-		const buf = self.buf;
+		const buf = self._view.buf;
 		if (required_capacity <= buf.len) {
 			return;
 		}
 
 		// from std.ArrayList
-		var new_capacity = self.buf.len;
+		var new_capacity = buf.len;
 		while (true) {
 			new_capacity +|= new_capacity / 2 + 8;
 			if (new_capacity >= required_capacity) break;
@@ -186,20 +268,17 @@ pub const Buffer = struct {
 				allocator.free(dyn);
 			}
 
-			self.buf = new_buffer;
+			self._view.buf = new_buffer;
 			self.dynamic = new_buffer;
 		} else {
 			const new_buffer = buf.ptr[0..new_capacity];
-			self.buf = new_buffer;
+			self._view.buf = new_buffer;
 			self.dynamic = new_buffer;
 		}
 	}
 
 	pub fn copy(self: Buffer, allocator: Allocator) ![]const u8 {
-		const pos = self.pos;
-		var c = try allocator.alloc(u8, pos);
-		@memcpy(c, self.buf[0..pos]);
-		return c;
+		return self._view.copy(allocator);
 	}
 
 	pub fn writer(self: *Buffer) Writer.IOWriter {
@@ -370,6 +449,20 @@ test "write big" {
 
 	try sb.writeU16Big(15000);
 	try t.exectSlice(u8, &[_]u8{155, 233, 51, 249, 7, 209, 129, 21, 195, 187, 171, 56, 58, 152}, sb.string());
+}
+
+test "skip & view" {
+	var sb = try Buffer.init(t.allocator, 10);
+	defer sb.deinit();
+
+	const start = try sb.skip(4);
+	try sb.write("hello world!!");
+
+	var v = sb.view(start);
+	v.writeU32Big(@intCast(sb.len() - 4));
+
+	try sb.writeByte('\n');
+	try t.exectSlice(u8, &[_]u8{0, 0, 0, 13, 'h', 'e', 'l', 'l', 'o', ' ', 'w', 'o', 'r', 'l', 'd', '!', '!', '\n'}, sb.string());
 }
 
 fn testString(allocator: Allocator, random: std.rand.Random) []const u8 {
