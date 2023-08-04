@@ -59,7 +59,7 @@ pub const View = struct {
 	pub fn write(self: *View, data: []const u8) void {
 		const pos = self.pos;
 		const end_pos = pos + data.len;
-		std.mem.copyForwards(u8, self.buf[pos..end_pos], data);
+		@memcpy(self.buf[pos..end_pos], data);
 		self.pos = end_pos;
 	}
 
@@ -262,7 +262,7 @@ pub const Buffer = struct {
 		const allocator = self._da orelse self._a;
 		if (buf.ptr == self.static.ptr or !allocator.resize(buf, new_capacity)) {
 			const new_buffer = try allocator.alloc(u8, new_capacity);
-			std.mem.copyForwards(u8, new_buffer[0..buf.len], buf);
+			@memcpy(new_buffer[0..buf.len], buf);
 
 			if (self.dynamic) |dyn| {
 				allocator.free(dyn);
