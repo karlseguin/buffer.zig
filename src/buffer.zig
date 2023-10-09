@@ -129,7 +129,6 @@ pub const Buffer = struct {
 	// created when we try to write more than static.len
 	dynamic: ?[]u8,
 
-
 	pub fn init(allocator: Allocator, size: usize) !Buffer {
 		const static = try allocator.alloc(u8, size);
 		return .{
@@ -152,16 +151,18 @@ pub const Buffer = struct {
 		}
 	}
 
-	pub fn reset(self: *Buffer, clear_dynamic: bool) void {
+	pub fn reset(self: *Buffer) void {
 		self._view.pos = 0;
-		if (clear_dynamic) {
-			if (self.dynamic) |dyn| {
-				(self._da orelse self._a).free(dyn);
-				self.dynamic = null;
-				self._view.buf = self.static;
-			}
-			self._da = null;
+		if (self.dynamic) |dyn| {
+			(self._da orelse self._a).free(dyn);
+			self.dynamic = null;
+			self._view.buf = self.static;
 		}
+		self._da = null;
+	}
+
+	pub fn resetRetainingCapacity(self: *Buffer) void {
+		self._view.pos = 0;
 	}
 
 	pub fn len(self: Buffer) usize {
@@ -337,7 +338,7 @@ test "growth" {
 		try t.expectEqual(492, sb.len());
 		try t.expectString("over 9000!!!!If you were to run this code, you'd almost certainly see a segmentation fault (aka, segfault). We create a Response which involves creating an ArenaAllocator and from that, an Allocator. This allocator is then used to format our string. For the purpose of this example, we create a 2nd response and immediately free it. We need this for the same reason that warning1 in our first example printed an almost ok value: we want to re-initialize the memory in our init function stack.", sb.string());
 
-		sb.reset(true);
+		sb.reset();
 	}
 }
 
@@ -367,12 +368,10 @@ test "reset without clear" {
 	var sb = try Buffer.init(t.allocator, 5);
 	defer sb.deinit();
 
-
-
 	try sb.write("hello world!1");
 	try t.expectString("hello world!1", sb.string());
 
-	sb.reset(false);
+	sb.resetRetainingCapacity();
 	try t.expectEqual(0, sb.len());
 	try t.expectEqual(false, sb.dynamic == null);
 	try sb.write("over 9000");
@@ -401,7 +400,7 @@ test "fuzz" {
 			try control.appendSlice(input);
 			try t.expectString(control.items, sb.string());
 		}
-		sb.reset(true);
+		sb.reset();
 		control.clearRetainingCapacity();
 		_ = arena.reset(.free_all);
 	}

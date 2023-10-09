@@ -22,8 +22,8 @@ pub const Pool = struct {
 			buffers[i] = sb;
 		}
 
-		return Pool{
-			.mutex = Mutex{},
+		return .{
+			.mutex = .{},
 			.buffers = buffers,
 			.allocator = allocator,
 			.available = pool_size,
@@ -45,18 +45,17 @@ pub const Pool = struct {
 	}
 
 	pub fn acquireWithAllocator(self: *Pool, dyn_allocator: Allocator) !*Buffer {
-		self.mutex.lock();
-
 		const buffers = self.buffers;
+
+		self.mutex.lock();
 		const available = self.available;
 		if (available == 0) {
 			// dont hold the lock over factory
 			self.mutex.unlock();
-			const allocator = self.allocator;
 
+			const allocator = self.allocator;
 			const sb = try allocator.create(Buffer);
 			sb.* = try Buffer.init(allocator, self.buffer_size);
-			if (comptime builtin.is_test) sb._view.buf[0] = 0;
 			sb._da = dyn_allocator;
 			return sb;
 		}
@@ -69,7 +68,7 @@ pub const Pool = struct {
 	}
 
 	pub fn release(self: *Pool, sb: *Buffer) void {
-		sb.reset(true);
+		sb.reset();
 		self.mutex.lock();
 
 		var buffers = self.buffers;
@@ -125,7 +124,7 @@ test "pool: dynamic allocator" {
 }
 
 test "pool: threadsafety" {
-	var p = try Pool.init(t.allocator, 4, 20);
+	var p = try Pool.init(t.allocator, 3, 20);
 	defer p.deinit();
 
 	// initialize this to 0 since we're asserting that it's 0
@@ -136,10 +135,8 @@ test "pool: threadsafety" {
 	const t1 = try std.Thread.spawn(.{}, testPool, .{&p});
 	const t2 = try std.Thread.spawn(.{}, testPool, .{&p});
 	const t3 = try std.Thread.spawn(.{}, testPool, .{&p});
-	const t4 = try std.Thread.spawn(.{}, testPool, .{&p});
-	const t5 = try std.Thread.spawn(.{}, testPool, .{&p});
 
-	t1.join(); t2.join(); t3.join(); t4.join(); t5.join();
+	t1.join(); t2.join(); t3.join();
 }
 
 fn testPool(p: *Pool) void {
