@@ -64,44 +64,42 @@ pub const View = struct {
 	}
 
 	pub fn writeU16Little(self: *View, value: u16) void {
-		const pos = self.pos;
-		const end_pos = self.pos + 2;
-		std.mem.writeIntLittle(u16, self.buf[pos..end_pos][0..2], value);
-		self.pos = end_pos;
+		self.writeIntLittle(u16, value);
 	}
 
 	pub fn writeU32Little(self: *View, value: u32) void {
-		const pos = self.pos;
-		const end_pos = self.pos + 4;
-		std.mem.writeIntLittle(u32, self.buf[pos..end_pos][0..4], value);
-		self.pos = end_pos;
+		self.writeIntLittle(u32, value);
 	}
 
 	pub fn writeU64Little(self: *View, value: u64) void {
+		self.writeIntLittle(u64, value);
+	}
+
+	pub fn writeIntLittle(self: *View, comptime T: type, value: T) void {
+		const l = @divExact(@typeInfo(T).Int.bits, 8);
 		const pos = self.pos;
-		const end_pos = self.pos + 8;
-		std.mem.writeIntLittle(u64, self.buf[pos..end_pos][0..8], value);
+		const end_pos = pos + l;
+		std.mem.writeIntLittle(T, self.buf[pos..end_pos][0..l], value);
 		self.pos = end_pos;
 	}
 
 	pub fn writeU16Big(self: *View, value: u16) void {
-		const pos = self.pos;
-		const end_pos = self.pos + 2;
-		std.mem.writeIntBig(u16, self.buf[pos..end_pos][0..2], value);
-		self.pos = end_pos;
+		self.writeIntBig(u16, value);
 	}
 
 	pub fn writeU32Big(self: *View, value: u32) void {
-		const pos = self.pos;
-		const end_pos = self.pos + 4;
-		std.mem.writeIntBig(u32, self.buf[pos..end_pos][0..4], value);
-		self.pos = end_pos;
+		self.writeIntBig(u32, value);
 	}
 
 	pub fn writeU64Big(self: *View, value: u64) void {
+		self.writeIntBig(u64, value);
+	}
+
+pub fn writeIntBig(self: *View, comptime T: type, value: T) void {
+		const l = @divExact(@typeInfo(T).Int.bits, 8);
 		const pos = self.pos;
-		const end_pos = self.pos + 8;
-		std.mem.writeIntBig(u64, self.buf[pos..end_pos][0..8], value);
+		const end_pos = pos + l;
+		std.mem.writeIntBig(T, self.buf[pos..end_pos][0..l], value);
 		self.pos = end_pos;
 	}
 };
@@ -207,33 +205,39 @@ pub const Buffer = struct {
 	}
 
 	pub fn writeU16Little(self: *Buffer, value: u16) !void {
-		try self.ensureUnusedCapacity(2);
-		self._view.writeU16Little(value);
+		return self.writeIntLittle(u16, value);
 	}
 
 	pub fn writeU32Little(self: *Buffer, value: u32) !void {
-		try self.ensureUnusedCapacity(4);
-		self._view.writeU32Little(value);
+		return self.writeIntLittle(u32, value);
 	}
 
 	pub fn writeU64Little(self: *Buffer, value: u64) !void {
-		try self.ensureUnusedCapacity(8);
-		self._view.writeU64Little(value);
+		return self.writeIntLittle(u64, value);
+	}
+
+	pub fn writeIntLittle(self: *Buffer, comptime T: type, value: T) !void {
+		const l = @divExact(@typeInfo(T).Int.bits, 8);
+		try self.ensureUnusedCapacity(l);
+		self._view.writeIntLittle(T, value);
 	}
 
 	pub fn writeU16Big(self: *Buffer, value: u16) !void {
-		try self.ensureUnusedCapacity(2);
-		self._view.writeU16Big(value);
+		return self.writeIntBig(u16, value);
 	}
 
 	pub fn writeU32Big(self: *Buffer, value: u32) !void {
-		try self.ensureUnusedCapacity(4);
-		self._view.writeU32Big(value);
+		return self.writeIntBig(u32, value);
 	}
 
 	pub fn writeU64Big(self: *Buffer, value: u64) !void {
-		try self.ensureUnusedCapacity(8);
-		self._view.writeU64Big(value);
+		return self.writeIntBig(u64, value);
+	}
+
+	pub fn writeIntBig(self: *Buffer, comptime T: type, value: T) !void {
+		const l = @divExact(@typeInfo(T).Int.bits, 8);
+		try self.ensureUnusedCapacity(l);
+		self._view.writeIntBig(T, value);
 	}
 
 	pub fn skip(self: *Buffer, n: usize) !usize {
