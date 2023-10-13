@@ -110,7 +110,7 @@ pub const Buffer = struct {
 	// Two allocators! This is largely a feature meant to be used with the Pool.
 	// Imagine you have a pool of 100 StringBuilders. Each one has a static buffer
 	// of 2K, allocated with a general purpose allocator. We store that in _a.
-	// Now you acquire an SB and start to write. You write more than 2K, so we
+	// Now you acquire an w and start to write. You write more than 2K, so we
 	// need to allocate `dynamic`. Yes, we could use our general purpose allocator
 	// (aka _a), but what if the app would like to use a different allocator for
 	// that, like an Arena?
@@ -195,6 +195,11 @@ pub const Buffer = struct {
 	pub fn write(self: *Buffer, data: []const u8) !void {
 		try self.ensureUnusedCapacity(data.len);
 		self._view.write(data);
+	}
+
+	// unsafe
+	pub fn writeAt(self: *Buffer, data: []const u8, pos: usize) void {
+		@memcpy(self._view.buf[pos..pos+data.len], data);
 	}
 
 	pub fn writeAssumeCapacity(self: *Buffer, data: []const u8) void {
@@ -287,17 +292,17 @@ pub const Buffer = struct {
 		}
 
 	pub const Writer = struct {
-		sb: *Buffer,
+		w: *Buffer,
 
 		pub const Error = Allocator.Error;
 		pub const IOWriter = std.io.Writer(Writer, error{OutOfMemory}, Writer.write);
 
-		fn init(sb: *Buffer) Writer {
-			return .{.sb = sb};
+		fn init(w: *Buffer) Writer {
+			return .{.w = w};
 		}
 
 		pub fn write(self: Writer, data: []const u8) Allocator.Error!usize {
-			try self.sb.write(data);
+			try self.w.write(data);
 			return data.len;
 		}
 	};
@@ -309,73 +314,73 @@ test {
 }
 
 test "growth" {
-	var sb = try Buffer.init(t.allocator, 10);
-	defer sb.deinit();
+	var w = try Buffer.init(t.allocator, 10);
+	defer w.deinit();
 
 	// we reset at the end of the loop, and things should work the exact same
 	// after a reset
 	for (0..5) |_| {
-		try t.expectEqual(0, sb.len());
-		try sb.writeByte('o');
-		try t.expectEqual(1, sb.len());
-		try t.expectString("o", sb.string());
-		try t.expectEqual(true, sb.dynamic == null);
+		try t.expectEqual(0, w.len());
+		try w.writeByte('o');
+		try t.expectEqual(1, w.len());
+		try t.expectString("o", w.string());
+		try t.expectEqual(true, w.dynamic == null);
 
 		// stays in static
-		try sb.write("ver 9000!");
-		try t.expectEqual(10, sb.len());
-		try t.expectString("over 9000!", sb.string());
-		try t.expectEqual(true, sb.dynamic == null);
+		try w.write("ver 9000!");
+		try t.expectEqual(10, w.len());
+		try t.expectString("over 9000!", w.string());
+		try t.expectEqual(true, w.dynamic == null);
 
 		// grows into dynamic
-		try sb.write("!!!");
-		try t.expectEqual(13, sb.len());
-		try t.expectString("over 9000!!!!", sb.string());
-		try t.expectEqual(false, sb.dynamic == null);
+		try w.write("!!!");
+		try t.expectEqual(13, w.len());
+		try t.expectString("over 9000!!!!", w.string());
+		try t.expectEqual(false, w.dynamic == null);
 
 
-		try sb.write("If you were to run this code, you'd almost certainly see a segmentation fault (aka, segfault). We create a Response which involves creating an ArenaAllocator and from that, an Allocator. This allocator is then used to format our string. For the purpose of this example, we create a 2nd response and immediately free it. We need this for the same reason that warning1 in our first example printed an almost ok value: we want to re-initialize the memory in our init function stack.");
-		try t.expectEqual(492, sb.len());
-		try t.expectString("over 9000!!!!If you were to run this code, you'd almost certainly see a segmentation fault (aka, segfault). We create a Response which involves creating an ArenaAllocator and from that, an Allocator. This allocator is then used to format our string. For the purpose of this example, we create a 2nd response and immediately free it. We need this for the same reason that warning1 in our first example printed an almost ok value: we want to re-initialize the memory in our init function stack.", sb.string());
+		try w.write("If you were to run this code, you'd almost certainly see a segmentation fault (aka, segfault). We create a Response which involves creating an ArenaAllocator and from that, an Allocator. This allocator is then used to format our string. For the purpose of this example, we create a 2nd response and immediately free it. We need this for the same reason that warning1 in our first example printed an almost ok value: we want to re-initialize the memory in our init function stack.");
+		try t.expectEqual(492, w.len());
+		try t.expectString("over 9000!!!!If you were to run this code, you'd almost certainly see a segmentation fault (aka, segfault). We create a Response which involves creating an ArenaAllocator and from that, an Allocator. This allocator is then used to format our string. For the purpose of this example, we create a 2nd response and immediately free it. We need this for the same reason that warning1 in our first example printed an almost ok value: we want to re-initialize the memory in our init function stack.", w.string());
 
-		sb.reset();
+		w.reset();
 	}
 }
 
 test "truncate" {
-	var sb = try Buffer.init(t.allocator, 10);
-	defer sb.deinit();
+	var w = try Buffer.init(t.allocator, 10);
+	defer w.deinit();
 
-	sb.truncate(100);
-	try t.expectEqual(0, sb.len());
+	w.truncate(100);
+	try t.expectEqual(0, w.len());
 
-	try sb.write("hello world!1");
+	try w.write("hello world!1");
 
-	sb.truncate(0);
-	try t.expectEqual(13, sb.len());
-	try t.expectString("hello world!1", sb.string());
+	w.truncate(0);
+	try t.expectEqual(13, w.len());
+	try t.expectString("hello world!1", w.string());
 
-	sb.truncate(1);
-	try t.expectEqual(12, sb.len());
-	try t.expectString("hello world!", sb.string());
+	w.truncate(1);
+	try t.expectEqual(12, w.len());
+	try t.expectString("hello world!", w.string());
 
-	sb.truncate(5);
-	try t.expectEqual(7, sb.len());
-	try t.expectString("hello w", sb.string());
+	w.truncate(5);
+	try t.expectEqual(7, w.len());
+	try t.expectString("hello w", w.string());
 }
 
 test "reset without clear" {
-	var sb = try Buffer.init(t.allocator, 5);
-	defer sb.deinit();
+	var w = try Buffer.init(t.allocator, 5);
+	defer w.deinit();
 
-	try sb.write("hello world!1");
-	try t.expectString("hello world!1", sb.string());
+	try w.write("hello world!1");
+	try t.expectString("hello world!1", w.string());
 
-	sb.resetRetainingCapacity();
-	try t.expectEqual(0, sb.len());
-	try t.expectEqual(false, sb.dynamic == null);
-	try sb.write("over 9000");
-	try sb.write("over 9000");
+	w.resetRetainingCapacity();
+	try t.expectEqual(0, w.len());
+	try t.expectEqual(false, w.dynamic == null);
+	try w.write("over 9000");
+	try w.write("over 9000");
 }
 
 test "fuzz" {
@@ -391,77 +396,90 @@ test "fuzz" {
 	const aa = arena.allocator();
 
 	for (1..100) |_| {
-		var sb = try Buffer.init(t.allocator, random.uintAtMost(u16, 1000) + 1);
-		defer sb.deinit();
+		var w = try Buffer.init(t.allocator, random.uintAtMost(u16, 1000) + 1);
+		defer w.deinit();
 
 		for (1..100) |_| {
 			const input = testString(aa, random);
-			try sb.write(input);
+			try w.write(input);
 			try control.appendSlice(input);
-			try t.expectString(control.items, sb.string());
+			try t.expectString(control.items, w.string());
 		}
-		sb.reset();
+		w.reset();
 		control.clearRetainingCapacity();
 		_ = arena.reset(.free_all);
 	}
 }
 
 test "writer" {
-	var sb = try Buffer.init(t.allocator, 10);
-	defer sb.deinit();
+	var w = try Buffer.init(t.allocator, 10);
+	defer w.deinit();
 
-	try std.json.stringify(.{.over = 9000, .spice = "must flow", .ok = true}, .{}, sb.writer());
-	try t.expectString("{\"over\":9000,\"spice\":\"must flow\",\"ok\":true}", sb.string());
+	try std.json.stringify(.{.over = 9000, .spice = "must flow", .ok = true}, .{}, w.writer());
+	try t.expectString("{\"over\":9000,\"spice\":\"must flow\",\"ok\":true}", w.string());
 }
 
 test "copy" {
-	var sb = try Buffer.init(t.allocator, 10);
-	defer sb.deinit();
+	var w = try Buffer.init(t.allocator, 10);
+	defer w.deinit();
 
-	try sb.write("hello!!");
-	const c = try sb.copy(t.allocator);
+	try w.write("hello!!");
+	const c = try w.copy(t.allocator);
 	defer t.allocator.free(c);
 	try t.expectString("hello!!", c);
 }
 
 test "write little" {
-	var sb = try Buffer.init(t.allocator, 20);
-	defer sb.deinit();
-	try sb.writeU64Little(11234567890123456789);
-	try t.exectSlice(u8, &[_]u8{21, 129, 209, 7, 249, 51, 233, 155}, sb.string());
+	var w = try Buffer.init(t.allocator, 20);
+	defer w.deinit();
+	try w.writeU64Little(11234567890123456789);
+	try t.exectSlice(u8, &[_]u8{21, 129, 209, 7, 249, 51, 233, 155}, w.string());
 
-	try sb.writeU32Little(3283856184);
-	try t.exectSlice(u8, &[_]u8{21, 129, 209, 7, 249, 51, 233, 155, 56, 171, 187, 195}, sb.string());
+	try w.writeU32Little(3283856184);
+	try t.exectSlice(u8, &[_]u8{21, 129, 209, 7, 249, 51, 233, 155, 56, 171, 187, 195}, w.string());
 
-	try sb.writeU16Little(15000);
-	try t.exectSlice(u8, &[_]u8{21, 129, 209, 7, 249, 51, 233, 155, 56, 171, 187, 195, 152, 58}, sb.string());
+	try w.writeU16Little(15000);
+	try t.exectSlice(u8, &[_]u8{21, 129, 209, 7, 249, 51, 233, 155, 56, 171, 187, 195, 152, 58}, w.string());
 }
 
 test "write big" {
-	var sb = try Buffer.init(t.allocator, 20);
-	defer sb.deinit();
-	try sb.writeU64Big(11234567890123456789);
-	try t.exectSlice(u8, &[_]u8{155, 233, 51, 249, 7, 209, 129, 21}, sb.string());
+	var w = try Buffer.init(t.allocator, 20);
+	defer w.deinit();
+	try w.writeU64Big(11234567890123456789);
+	try t.exectSlice(u8, &[_]u8{155, 233, 51, 249, 7, 209, 129, 21}, w.string());
 
-	try sb.writeU32Big(3283856184);
-	try t.exectSlice(u8, &[_]u8{155, 233, 51, 249, 7, 209, 129, 21, 195, 187, 171, 56}, sb.string());
+	try w.writeU32Big(3283856184);
+	try t.exectSlice(u8, &[_]u8{155, 233, 51, 249, 7, 209, 129, 21, 195, 187, 171, 56}, w.string());
 
-	try sb.writeU16Big(15000);
-	try t.exectSlice(u8, &[_]u8{155, 233, 51, 249, 7, 209, 129, 21, 195, 187, 171, 56, 58, 152}, sb.string());
+	try w.writeU16Big(15000);
+	try t.exectSlice(u8, &[_]u8{155, 233, 51, 249, 7, 209, 129, 21, 195, 187, 171, 56, 58, 152}, w.string());
 }
 
 test "skip & view" {
-	var sb = try Buffer.init(t.allocator, 10);
-	defer sb.deinit();
+	var w = try Buffer.init(t.allocator, 10);
+	defer w.deinit();
 
-	const start = try sb.skip(4);
-	try sb.write("hello world!!");
+	const start = try w.skip(4);
+	try w.write("hello world!!");
 
-	var v = sb.view(start);
-	v.writeU32Big(@intCast(sb.len() - 4));
+	var v = w.view(start);
+	v.writeU32Big(@intCast(w.len() - 4));
 
-	try sb.writeByte('\n');
-	try t.exectSlice(u8, &[_]u8{0, 0, 0, 13, 'h', 'e', 'l', 'l', 'o', ' ', 'w', 'o', 'r', 'l', 'd', '!', '!', '\n'}, sb.string());
+	try w.writeByte('\n');
+	try t.exectSlice(u8, &[_]u8{0, 0, 0, 13, 'h', 'e', 'l', 'l', 'o', ' ', 'w', 'o', 'r', 'l', 'd', '!', '!', '\n'}, w.string());
+}
+
+test "writeAt" {
+	var w = try Buffer.init(t.allocator, 200);
+	defer w.deinit();
+
+	try w.write("hello");
+	try w.write(&.{0, 0, 0, 0, 0});
+	try w.write("world");
+
+	w.writeAt(" ", 5);
+	w.writeAt("123 ", 6);
+	try t.expectString("hello 123 world", w.string());
 }
 
 fn testString(allocator: Allocator, random: std.rand.Random) []const u8 {
