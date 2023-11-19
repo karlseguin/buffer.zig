@@ -79,7 +79,7 @@ pub const View = struct {
 		const l = @divExact(@typeInfo(T).Int.bits, 8);
 		const pos = self.pos;
 		const end_pos = pos + l;
-		std.mem.writeInt(T, self.buf[pos..end_pos][0..l], value, .little);
+		std.mem.writeIntLittle(T, self.buf[pos..end_pos][0..l], value);
 		self.pos = end_pos;
 	}
 
@@ -99,7 +99,7 @@ pub fn writeIntBig(self: *View, comptime T: type, value: T) void {
 		const l = @divExact(@typeInfo(T).Int.bits, 8);
 		const pos = self.pos;
 		const end_pos = pos + l;
-		std.mem.writeInt(T, self.buf[pos..end_pos][0..l], value, .big);
+		std.mem.writeIntBig(T, self.buf[pos..end_pos][0..l], value);
 		self.pos = end_pos;
 	}
 };
