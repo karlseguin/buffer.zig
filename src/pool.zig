@@ -17,7 +17,7 @@ pub const Pool = struct {
 		const buffers = try allocator.alloc(*Buffer, pool_size);
 
 		for (0..pool_size) |i| {
-			var sb = try allocator.create(Buffer);
+			const sb = try allocator.create(Buffer);
 			sb.* = try Buffer.init(allocator, buffer_size);
 			buffers[i] = sb;
 		}
@@ -91,16 +91,16 @@ test "pool: acquire and release" {
 	var p = try Pool.init(t.allocator, 2, 100);
 	defer p.deinit();
 
-	var sb1a = p.acquire() catch unreachable;
-	var sb2a = p.acquire() catch unreachable;
-	var sb3a = p.acquire() catch unreachable; // this should be dynamically generated
+	const sb1a = p.acquire() catch unreachable;
+	const sb2a = p.acquire() catch unreachable;
+	const sb3a = p.acquire() catch unreachable; // this should be dynamically generated
 
 	try t.expectEqual(false, sb1a == sb2a);
 	try t.expectEqual(false, sb2a == sb3a);
 
 	p.release(sb1a);
 
-	var sb1b = p.acquire() catch unreachable;
+	const sb1b = p.acquire() catch unreachable;
 	try t.expectEqual(true, sb1a == sb1b);
 
 	p.release(sb3a);
