@@ -130,42 +130,41 @@ pub const Buffer = struct {
 
 
 	pub fn writeU16Little(self: *Buffer, value: u16) !void {
-		return self.writeIntLittle(u16, value);
+		return self.writeIntT(u16, value, .little);
 	}
 
 	pub fn writeU32Little(self: *Buffer, value: u32) !void {
-		return self.writeIntLittle(u32, value);
+		return self.writeIntT(u32, value, .little);
 	}
 
 	pub fn writeU64Little(self: *Buffer, value: u64) !void {
-		return self.writeIntLittle(u64, value);
+		return self.writeIntT(u64, value, .little);
 	}
 
 	pub fn writeIntLittle(self: *Buffer, comptime T: type, value: T) !void {
-		const l = @divExact(@typeInfo(T).Int.bits, 8);
-		try self.ensureUnusedCapacity(l);
-		const pos = self.pos;
-		writeIntInto(T, self.buf, pos, value, l, .little);
-		self.pos = pos + l;
+		return self.writeIntT(T, value, .little);
 	}
 
 	pub fn writeU16Big(self: *Buffer, value: u16) !void {
-		return self.writeIntBig(u16, value);
+		return self.writeIntT(u16, value, .big);
 	}
 
 	pub fn writeU32Big(self: *Buffer, value: u32) !void {
-		return self.writeIntBig(u32, value);
+		return self.writeIntT(u32, value, .big);
 	}
 
 	pub fn writeU64Big(self: *Buffer, value: u64) !void {
-		return self.writeIntBig(u64, value);
+		return self.writeIntT(u64, value, .big);
 	}
 
 	pub fn writeIntBig(self: *Buffer, comptime T: type, value: T) !void {
+		return self.writeIntT(T, value, .big);
+	}
+
+	pub fn writeIntT(self: *Buffer, comptime T: type, value: T, endian: Endian) void {
 		const l = @divExact(@typeInfo(T).Int.bits, 8);
-		try self.ensureUnusedCapacity(l);
 		const pos = self.pos;
-		writeIntInto(T, self.buf, pos, value, l, .big);
+		writeIntInto(T, self.buf, pos, value, l, endian);
 		self.pos = pos + l;
 	}
 
@@ -238,7 +237,7 @@ pub const View = struct {
 
 	pub fn writeByte(self: *View, b: u8) void {
 		const pos = self.pos;
-	writeByteInto(self.buf.buf, pos, b);
+		writeByteInto(self.buf.buf, pos, b);
 		self.pos = pos + 1;
 	}
 
@@ -302,6 +301,10 @@ pub const View = struct {
 		return self.writeIntT(i64, value, .little);
 	}
 
+	pub fn writeIntLittle(self: *View, comptime T: type, value: T) void {
+		self.writeIntT(T, value, .little);
+	}
+
 	pub fn writeU16Big(self: *View, value: u16) void {
 		return self.writeIntT(u16, value, .big);
 	}
@@ -326,43 +329,15 @@ pub const View = struct {
 		return self.writeIntT(i64, value, .big);
 	}
 
-	fn writeIntT(self: *View, comptime T: type, value: T, endian: Endian) void {
+	pub fn writeIntBig(self: *View, comptime T: type, value: T) void {
+		self.writeIntT(T, value, .big);
+	}
+
+	pub fn writeIntT(self: *View, comptime T: type, value: T, endian: Endian) void {
 		const l = @divExact(@typeInfo(T).Int.bits, 8);
 		const pos = self.pos;
 		writeIntInto(T, self.buf.buf, pos, value, l, endian);
 		self.pos = pos + l;
-	}
-
-	pub fn writeInt(self: *View, value: anytype) void {
-		return self.writeIntAs(value, self.endian);
-	}
-
-	pub fn writeIntAs(self: *View, value: anytype, endian: Endian) void {
-		const T = @TypeOf(value);
-		switch (@typeInfo(T)) {
-			.ComptimeInt => @compileError("Writing a comptime_int is slightly ambiguous, please cast to a specific type: sb.writeInt(@as(i32, 9001))"),
-			.Int => |int| {
-				if (int.signedness == .signed) {
-					switch (int.bits) {
-						8 => return self.writeByte(value),
-						16 => return self.writeIntT(i16, value, endian),
-						32 => return self.writeIntT(i32, value, endian),
-						64 => return self.writeIntT(i64, value, endian),
-						else => {},
-					}
-				} else {
-					switch (int.bits) {
-						8 => return self.writeByte(value),
-						16 => return self.writeIntT(u16, value, endian),
-						32 => return self.writeIntT(u32, value, endian),
-						64 => return self.writeIntT(u64, value, endian),
-						else => {},
-					}
-				}
-			},
-			else => {},
-		}
-		@compileError("Unsupported integer type: " ++ @typeName(T));
 	}
 };
 
