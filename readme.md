@@ -26,37 +26,21 @@ You can call `buf.writer()` to get an `std.io.Writer`.
 You can use `writeU16Big`, `writeU32Big`, `writeU64Big` and `writeU16Little`, `writeU32Little`, `writeU64Little` to write integer values.
 
 ## Views
-A common pattern is to include a 2 or 4 byte payload length prefix to messages. However, this length might not until after the message is generated. The `skip` and `view` functions exist specifically to solve the problem - but they must be used carefully:
+A common pattern is to include a 2 or 4 byte payload length prefix to messages. However, this length might not until after the message is generated. The `skip` functions exist specifically to solve the problem:
 
 ```zig
 var buf = try Buffer.init(allocator, 100);
 
-// reserve 4 bytes for our length
-var start = buf.skip(4);
+// skip 4 bytes, reserving a "view" to the start of the skipped location
+var view = buf.skip(4);
 try buf.write("hello world");
 try buf.writeByte('!');
 
-var view = buf.view(start);
-// -4 since most protocols don't include the 4 byte length in the length itself
-view.writeU32Little(@intCast(buf.len() - 4);
+// fill in those first 4 bytes with the lenght (which we now know.)
+view.writeU32Little(@intCast(buf.len());
 ```
 
-The `view` exposes most of the same methods as the Buffer, but cannot grow and does not perform bound checking. Furthermore, interlacing writes to the view and the buffer can segfault. You can safely write to the buffer after you're done writing to the view.
-
-For example, the following can segfault:
-
-```zig
-var buf = try Buffer.init(allocator, 100);
-
-// reserve 4 bytes for our length
-var start = buf.skip(4);
-try buf.write("hello world");
-
-var view = buf.view(start);
-try buf.writeByte('!');
-// view might not be valid as we've since written to buf
-view.writeU32Little(@intCast(buf.len() - 4);
-```
+The `view` exposes most of the same methods as the Buffer, but cannot grow and does not perform bound checking.
 
 ## Pooling
 

@@ -129,7 +129,7 @@ test "pool: threadsafety" {
 
 	// initialize this to 0 since we're asserting that it's 0
 	for (p.buffers) |sb| {
-		sb._view.buf[0] = 0;
+		sb.buf[0] = 0;
 	}
 
 	const t1 = try std.Thread.spawn(.{}, testPool, .{&p});
@@ -146,11 +146,11 @@ fn testPool(p: *Pool) void {
 	for (0..5000) |_| {
 		var sb = p.acquire() catch unreachable;
 		// no other thread should have set this to 255
-		std.debug.assert(sb._view.buf[0] == 0);
+		std.debug.assert(sb.buf[0] == 0);
 
-		sb._view.buf[0] = 255;
+		sb.buf[0] = 255;
 		std.time.sleep(random.uintAtMost(u32, 100000));
-		sb._view.buf[0] = 0;
+		sb.buf[0] = 0;
 		p.release(sb);
 	}
 }
