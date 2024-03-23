@@ -1,3 +1,11 @@
+// in your build.zig, you can specify a custom test runner:
+// const tests = b.addTest(.{
+//   .target = target,
+//   .optimize = optimize,
+//   .test_runner = "test_runner.zig", // add this line
+//   .root_source_file = .{ .path = "src/main.zig" },
+// });
+
 const std = @import("std");
 const builtin = @import("builtin");
 
@@ -30,21 +38,25 @@ pub fn main() !void {
 		var status = Status.pass;
 		slowest.startTiming();
 
-		const is_unnamed_test = std.mem.eql(u8, "test_0", t.name);
+		const is_unnamed_test = std.mem.endsWith(u8, t.name, ".test_0");
 		if (env.filter) |f| {
 			if (!is_unnamed_test and std.mem.indexOf(u8, t.name, f) == null) {
 				continue;
 			}
 		}
 
-
 		const result = t.func();
 		if (is_unnamed_test) {
 			continue;
 		}
 
-		// strip out the test. prefix
-		const friendly_name = t.name[5..];
+		const friendly_name = blk: {
+			const name = t.name;
+			var it = std.mem.splitScalar(u8, name, '.');
+			_ = it.next() orelse break :blk name; // skip module name
+			_ = it.next() orelse break :blk name; // slip "test"
+			break :blk it.rest();
+		};
 		const ns_taken = slowest.endTiming(friendly_name);
 
 		if (std.testing.allocator_instance.deinit() == .leak) {
@@ -92,7 +104,7 @@ pub fn main() !void {
 	printer.fmt("\n", .{});
 	try slowest.display(printer);
 	printer.fmt("\n", .{});
-	std.os.exit(if (fail == 0) 0 else 1);
+	std.posix.exit(if (fail == 0) 0 else 1);
 }
 
 const Printer = struct {
