@@ -162,7 +162,7 @@ pub const Buffer = struct {
 	}
 
 	pub fn writeIntT(self: *Buffer, comptime T: type, value: T, endian: Endian) void {
-		const l = @divExact(@typeInfo(T).Int.bits, 8);
+		const l = @divExact(@typeInfo(T).int.bits, 8);
 		const pos = self.pos;
 		writeIntInto(T, self.buf, pos, value, l, endian);
 		self.pos = pos + l;
@@ -334,7 +334,7 @@ pub const View = struct {
 	}
 
 	pub fn writeIntT(self: *View, comptime T: type, value: T, endian: Endian) void {
-		const l = @divExact(@typeInfo(T).Int.bits, 8);
+		const l = @divExact(@typeInfo(T).int.bits, 8);
 		const pos = self.pos;
 		writeIntInto(T, self.buf.buf, pos, value, l, endian);
 		self.pos = pos + l;
@@ -535,7 +535,7 @@ test "writeAt" {
 	try t.expectString("hello 123 world", w.string());
 }
 
-fn testString(allocator: Allocator, random: std.rand.Random) []const u8 {
+fn testString(allocator: Allocator, random: std.Random) []const u8 {
 	var s = allocator.alloc(u8, random.uintAtMost(u8, 100) + 1) catch unreachable;
 	for (0..s.len) |i| {
 		s[i] = random.uintAtMost(u8, 90) + 32;

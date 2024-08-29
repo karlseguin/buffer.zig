@@ -10,8 +10,8 @@ pub fn expectEqual(expected: anytype, actual: anytype) !void {
 pub const expectString = std.testing.expectEqualStrings;
 pub const exectSlice = std.testing.expectEqualSlices;
 
-pub fn getRandom() std.rand.DefaultPrng {
+pub fn getRandom() std.Random.DefaultPrng {
 	var seed: u64 = undefined;
 	std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
-	return std.rand.DefaultPrng.init(seed);
+	return std.Random.DefaultPrng.init(seed);
 }
