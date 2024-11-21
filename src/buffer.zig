@@ -161,9 +161,10 @@ pub const Buffer = struct {
 		return self.writeIntT(T, value, .big);
 	}
 
-	pub fn writeIntT(self: *Buffer, comptime T: type, value: T, endian: Endian) void {
+	pub fn writeIntT(self: *Buffer, comptime T: type, value: T, endian: Endian) !void {
 		const l = @divExact(@typeInfo(T).int.bits, 8);
 		const pos = self.pos;
+		try self.ensureUnusedCapacity(l);
 		writeIntInto(T, self.buf, pos, value, l, endian);
 		self.pos = pos + l;
 	}
@@ -401,6 +402,16 @@ test "growth" {
 	}
 }
 
+test "growth with int" {
+	var w = try Buffer.init(t.allocator, 10);
+	defer w.deinit();
+
+	try w.writeU64Big(9000);
+	try w.writeU64Big(10000);
+	try t.expectSlice(u8, &.{0, 0, 0, 0, 0, 0, 0x23, 0x28}, w.string()[0..8]);
+	try t.expectSlice(u8, &.{0, 0, 0, 0, 0, 0, 0x27, 0x10}, w.string()[8..16]);
+}
+
 test "truncate" {
 	var w = try Buffer.init(t.allocator, 10);
 	defer w.deinit();
@@ -487,26 +498,26 @@ test "write little" {
 	var w = try Buffer.init(t.allocator, 20);
 	defer w.deinit();
 	try w.writeU64Little(11234567890123456789);
-	try t.exectSlice(u8, &[_]u8{21, 129, 209, 7, 249, 51, 233, 155}, w.string());
+	try t.expectSlice(u8, &[_]u8{21, 129, 209, 7, 249, 51, 233, 155}, w.string());
 
 	try w.writeU32Little(3283856184);
-	try t.exectSlice(u8, &[_]u8{21, 129, 209, 7, 249, 51, 233, 155, 56, 171, 187, 195}, w.string());
+	try t.expectSlice(u8, &[_]u8{21, 129, 209, 7, 249, 51, 233, 155, 56, 171, 187, 195}, w.string());
 
 	try w.writeU16Little(15000);
-	try t.exectSlice(u8, &[_]u8{21, 129, 209, 7, 249, 51, 233, 155, 56, 171, 187, 195, 152, 58}, w.string());
+	try t.expectSlice(u8, &[_]u8{21, 129, 209, 7, 249, 51, 233, 155, 56, 171, 187, 195, 152, 58}, w.string());
 }
 
 test "write big" {
 	var w = try Buffer.init(t.allocator, 20);
 	defer w.deinit();
 	try w.writeU64Big(11234567890123456789);
-	try t.exectSlice(u8, &[_]u8{155, 233, 51, 249, 7, 209, 129, 21}, w.string());
+	try t.expectSlice(u8, &[_]u8{155, 233, 51, 249, 7, 209, 129, 21}, w.string());
 
 	try w.writeU32Big(3283856184);
-	try t.exectSlice(u8, &[_]u8{155, 233, 51, 249, 7, 209, 129, 21, 195, 187, 171, 56}, w.string());
+	try t.expectSlice(u8, &[_]u8{155, 233, 51, 249, 7, 209, 129, 21, 195, 187, 171, 56}, w.string());
 
 	try w.writeU16Big(15000);
-	try t.exectSlice(u8, &[_]u8{155, 233, 51, 249, 7, 209, 129, 21, 195, 187, 171, 56, 58, 152}, w.string());
+	try t.expectSlice(u8, &[_]u8{155, 233, 51, 249, 7, 209, 129, 21, 195, 187, 171, 56, 58, 152}, w.string());
 }
 
 test "skip & view" {
@@ -519,7 +530,7 @@ test "skip & view" {
 	view.writeU32Big(@intCast(w.len() - 4));
 
 	try w.writeByte('\n');
-	try t.exectSlice(u8, &[_]u8{0, 0, 0, 13, 'h', 'e', 'l', 'l', 'o', ' ', 'w', 'o', 'r', 'l', 'd', '!', '!', '\n'}, w.string());
+	try t.expectSlice(u8, &[_]u8{0, 0, 0, 13, 'h', 'e', 'l', 'l', 'o', ' ', 'w', 'o', 'r', 'l', 'd', '!', '!', '\n'}, w.string());
 }
 
 test "writeAt" {
