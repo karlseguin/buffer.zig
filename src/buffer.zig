@@ -74,6 +74,15 @@ pub const Buffer = struct {
         return self.buf[0..self.pos];
     }
 
+    pub fn cString(self: *Buffer) ![:0]const u8 {
+        // Make sure there is a null byte at the end
+
+        try self.ensureUnusedCapacity(1);
+        self.buf[self.pos] = 0;
+
+        return self.buf[0..self.pos :0];
+    }
+
     pub fn truncate(self: *Buffer, n: usize) void {
         const pos = self.pos;
         if (n >= pos) {
