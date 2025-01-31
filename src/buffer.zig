@@ -552,6 +552,18 @@ test "writeAt" {
     try t.expectString("hello 123 world", w.string());
 }
 
+test "cString" {
+    var w = try Buffer.init(t.allocator, 10);
+    defer w.deinit();
+    try t.expectString("", try w.cString());
+
+    try w.write("123456789");
+    try t.expectString("123456789", try w.cString());
+
+    try w.write("0");
+    try t.expectString("1234567890", try w.cString());
+}
+
 fn testString(allocator: Allocator, random: std.Random) []const u8 {
     var s = allocator.alloc(u8, random.uintAtMost(u8, 100) + 1) catch unreachable;
     for (0..s.len) |i| {
