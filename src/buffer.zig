@@ -218,24 +218,70 @@ pub const Buffer = struct {
         return c;
     }
 
-    pub fn writer(self: *Buffer) Writer.IOWriter {
-        return .{ .context = Writer.init(self) };
+    pub fn writer(self: *Buffer) Writer {
+        return .init(self);
     }
 
     pub const Writer = struct {
         w: *Buffer,
+        interface: std.io.Writer,
 
         pub const Error = Allocator.Error;
-        pub const IOWriter = std.io.Writer(Writer, error{OutOfMemory}, Writer.write);
 
         fn init(w: *Buffer) Writer {
-            return .{ .w = w };
+            return .{
+                .w = w,
+                .interface = .{
+                    .vtable = &.{
+                        .drain = drain,
+                    },
+                    .buffer = &.{},
+                },
+            };
         }
 
-        pub fn write(self: Writer, data: []const u8) Allocator.Error!usize {
-            try self.w.write(data);
-            return data.len;
+        pub fn adaptToNewApi(self: Writer) Adapter {
+            return .{ .new_interface = self.interface };
         }
+
+        pub fn drain(w: *std.Io.Writer, data: []const []const u8, splat: usize) error{WriteFailed}!usize {
+            const self: *Writer = @alignCast(@fieldParentPtr("interface", w));
+
+            var written: usize = 0;
+            for (data) |d| {
+                self.w.write(d) catch return error.WriteFailed;
+                written += d.len;
+            }
+            if (splat < 2) {
+                return written;
+            }
+
+            const last = data[data.len - 1];
+            for (0..splat) |_| {
+                self.w.write(last) catch return error.WriteFailed;
+                written += last.len;
+            }
+            return written;
+        }
+
+        // Legacy API
+        pub fn writeByte(self: Writer, b: u8) !void {
+            return self.w.writeByte(b);
+        }
+        pub fn writeByteNTimes(self: *Writer, b: u8, n: usize) !void {
+            return self.w.writeByteNTimes(b, n);
+        }
+        pub fn print(self: *Writer, comptime fmt: []const u8, args: anytype) !void {
+            return self.interface.print(fmt, args) catch return error.OutOfMemory;
+        }
+        pub fn writeAll(self: Writer, data: []const u8) !void {
+            return self.w.write(data);
+        }
+
+        pub const Adapter = struct {
+            err: ?Error = null,
+            new_interface: std.Io.Writer,
+        };
     };
 };
 
