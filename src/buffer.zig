@@ -244,24 +244,11 @@ pub const Buffer = struct {
             return .{ .new_interface = self.interface };
         }
 
-        pub fn drain(w: *std.Io.Writer, data: []const []const u8, splat: usize) error{WriteFailed}!usize {
-            const self: *Writer = @alignCast(@fieldParentPtr("interface", w));
-
-            var written: usize = 0;
-            for (data) |d| {
-                self.w.write(d) catch return error.WriteFailed;
-                written += d.len;
-            }
-            if (splat < 2) {
-                return written;
-            }
-
-            const last = data[data.len - 1];
-            for (0..splat) |_| {
-                self.w.write(last) catch return error.WriteFailed;
-                written += last.len;
-            }
-            return written;
+        pub fn drain(io_w: *std.io.Writer, data: []const []const u8, splat: usize) error{WriteFailed}!usize {
+            _ = splat;
+            const self: *Writer = @alignCast(@fieldParentPtr("interface", io_w));
+            self.w.write(data[0]) catch return error.WriteFailed;
+            return data[0].len;
         }
 
         // Legacy API
