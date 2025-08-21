@@ -32,6 +32,8 @@ pub const Buffer = struct {
     // created when we try to write more than static.len
     dynamic: ?[]u8,
 
+    interface: std.Io.Writer,
+
     pub fn init(allocator: Allocator, size: usize) !Buffer {
         const static = try allocator.alloc(u8, size);
         return .{
@@ -41,6 +43,12 @@ pub const Buffer = struct {
             .buf = static,
             .static = static,
             .dynamic = null,
+            .interface = .{
+                .buffer = &.{},
+                .vtable = &.{
+                    .drain = drain,
+                },
+            }
         };
     }
 
@@ -50,6 +58,13 @@ pub const Buffer = struct {
         if (self.dynamic) |dyn| {
             (self._da orelse allocator).free(dyn);
         }
+    }
+
+    pub fn drain(io_w: *std.io.Writer, data: []const []const u8, splat: usize) error{WriteFailed}!usize {
+        _ = splat;
+        const self: *Buffer = @alignCast(@fieldParentPtr("interface", io_w));
+        self.write(data[0]) catch return error.WriteFailed;
+        return data[0].len;
     }
 
     pub fn reset(self: *Buffer) void {
@@ -217,59 +232,6 @@ pub const Buffer = struct {
         @memcpy(c, self.buf[0..pos]);
         return c;
     }
-
-    pub fn writer(self: *Buffer) Writer {
-        return .init(self);
-    }
-
-    pub const Writer = struct {
-        w: *Buffer,
-        interface: std.io.Writer,
-
-        pub const Error = Allocator.Error;
-
-        fn init(w: *Buffer) Writer {
-            return .{
-                .w = w,
-                .interface = .{
-                    .vtable = &.{
-                        .drain = drain,
-                    },
-                    .buffer = &.{},
-                },
-            };
-        }
-
-        pub fn adaptToNewApi(self: Writer) Adapter {
-            return .{ .new_interface = self.interface };
-        }
-
-        pub fn drain(io_w: *std.io.Writer, data: []const []const u8, splat: usize) error{WriteFailed}!usize {
-            _ = splat;
-            const self: *Writer = @alignCast(@fieldParentPtr("interface", io_w));
-            self.w.write(data[0]) catch return error.WriteFailed;
-            return data[0].len;
-        }
-
-        // Legacy API
-        pub fn writeByte(self: Writer, b: u8) !void {
-            return self.w.writeByte(b);
-        }
-        pub fn writeByteNTimes(self: *Writer, b: u8, n: usize) !void {
-            return self.w.writeByteNTimes(b, n);
-        }
-        pub fn print(self: *Writer, comptime fmt: []const u8, args: anytype) !void {
-            return self.interface.print(fmt, args) catch return error.OutOfMemory;
-        }
-        pub fn writeAll(self: Writer, data: []const u8) !void {
-            return self.w.write(data);
-        }
-
-        pub const Adapter = struct {
-            err: ?Error = null,
-            new_interface: std.Io.Writer,
-        };
-    };
 };
 
 pub const View = struct {
@@ -488,8 +450,8 @@ test "reset without clear" {
 }
 
 test "fuzz" {
-    var control = std.ArrayList(u8).init(t.allocator);
-    defer control.deinit();
+    var control: std.ArrayList(u8) = .empty;
+    defer control.deinit(t.allocator);
 
     var r = t.getRandom();
     const random = r.random();
@@ -506,7 +468,7 @@ test "fuzz" {
         for (1..100) |_| {
             const input = testString(aa, random);
             try w.write(input);
-            try control.appendSlice(input);
+            try control.appendSlice(t.allocator, input);
             try t.expectString(control.items, w.string());
         }
         w.reset();
@@ -519,7 +481,7 @@ test "writer" {
     var w = try Buffer.init(t.allocator, 10);
     defer w.deinit();
 
-    try std.json.stringify(.{ .over = 9000, .spice = "must flow", .ok = true }, .{}, w.writer());
+    try std.json.Stringify.value(.{ .over = 9000, .spice = "must flow", .ok = true }, .{}, &w.interface);
     try t.expectString("{\"over\":9000,\"spice\":\"must flow\",\"ok\":true}", w.string());
 }
 
